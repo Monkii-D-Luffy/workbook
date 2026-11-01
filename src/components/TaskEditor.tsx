@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { db, type Area, type Priority, type Recurrence, type Task } from '../db'
+import { db, type Area, type ChecklistItem, type Priority, type Recurrence, type Task } from '../db'
 import { RECURRENCE_LABEL } from '../lib/dates'
-import { PRIORITY_LABEL, RECURRENCES, newTask, parseTags } from '../lib/tasks'
+import { PRIORITY_LABEL, RECURRENCES, newChecklistId, newTask, parseTags } from '../lib/tasks'
 
 interface Props {
   task?: Task
@@ -21,6 +21,8 @@ export function TaskEditor({ task, areas, defaultAreaId, onClose }: Props) {
   const [assignee, setAssignee] = useState(task?.assignee ?? '')
   const [recurrence, setRecurrence] = useState<Recurrence>(task?.recurrence ?? 'none')
   const [extra, setExtra] = useState<Record<string, string>>(task?.extra ?? {})
+  const [checklist, setChecklist] = useState<ChecklistItem[]>(task?.checklist ?? [])
+  const [newItem, setNewItem] = useState('')
   const area = areas.find((a) => a.id === areaId)
 
   async function save(e: React.FormEvent) {
@@ -39,6 +41,7 @@ export function TaskEditor({ task, areas, defaultAreaId, onClose }: Props) {
       assignee: assignee.trim() || undefined,
       recurrence,
       extra: keep,
+      checklist: checklist.filter((c) => c.text.trim()),
     }
     if (task?.id) await db.tasks.update(task.id, { ...fields, updatedAt: Date.now() })
     else await db.tasks.add(newTask(fields))
@@ -119,8 +122,47 @@ export function TaskEditor({ task, areas, defaultAreaId, onClose }: Props) {
           รายละเอียด
           <textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
+        <div className="flex flex-col gap-1.5">
+          <div className="text-xs font-medium text-slate-600">
+            Checklist {checklist.length > 0 && `(${checklist.filter((c) => c.done).length}/${checklist.length})`}
+          </div>
+          {checklist.map((c) => (
+            <div key={c.id} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                aria-label={`เสร็จ: ${c.text}`}
+                checked={c.done}
+                onChange={() => setChecklist(checklist.map((x) => (x.id === c.id ? { ...x, done: !x.done } : x)))}
+                className="h-4 w-4"
+              />
+              <input
+                aria-label="ขั้นตอน"
+                value={c.text}
+                onChange={(e) => setChecklist(checklist.map((x) => (x.id === c.id ? { ...x, text: e.target.value } : x)))}
+                className={`flex-1 py-1 ${c.done ? 'text-slate-400 line-through' : ''}`}
+              />
+              <button type="button" aria-label={`ลบขั้นตอน ${c.text}`} onClick={() => setChecklist(checklist.filter((x) => x.id !== c.id))} className="px-1 text-slate-400 hover:text-red-600">
+                ×
+              </button>
+            </div>
+          ))}
+          <input
+            aria-label="เพิ่มขั้นตอน"
+            placeholder="+ เพิ่มขั้นตอน แล้วกด Enter"
+            value={newItem}
+            onChange={(e) => setNewItem(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                if (newItem.trim()) setChecklist([...checklist, { id: newChecklistId(), text: newItem.trim(), done: false }])
+                setNewItem('')
+              }
+            }}
+            className="py-1"
+          />
+        </div>
         {recurrence !== 'none' && (
-          <p className="text-xs text-slate-500">เมื่อกดเสร็จ ระบบจะสร้างงานรอบถัดไปให้อัตโนมัติ</p>
+          <p className="text-xs text-slate-500">เมื่อกดเสร็จ ระบบจะสร้างงานรอบถัดไปให้อัตโนมัติ{checklist.length > 0 && ' พร้อม Checklist ที่ล้างเครื่องหมายแล้ว'}</p>
         )}
         <div className="flex items-center gap-2">
           {task && (

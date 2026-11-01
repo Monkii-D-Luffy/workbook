@@ -18,6 +18,12 @@ export interface Area {
   order: number
 }
 
+export interface ChecklistItem {
+  id: string
+  text: string
+  done: boolean
+}
+
 export interface Task {
   id?: number
   title: string
@@ -33,6 +39,8 @@ export interface Task {
   recurrence: Recurrence
   /** Area-specific fields, keyed by AreaField.key */
   extra: Record<string, string>
+  /** Sub-steps, e.g. the steps of a PM job */
+  checklist?: ChecklistItem[]
   /** Who does it, by name (people from meetings need no account) */
   assignee?: string
   /** Set when the task came from a meeting action item */
@@ -77,6 +85,8 @@ export class WorkbookDB extends Dexie {
   areas!: Table<Area, number>
   meetings!: Table<Meeting, number>
   templates!: Table<MeetingTemplate, number>
+  /** Small key-value store for things that must live in IndexedDB, such as the backup folder handle */
+  kv!: Table<{ key: string; value: unknown }, string>
 
   constructor(name = 'workbook') {
     super(name)
@@ -90,6 +100,7 @@ export class WorkbookDB extends Dexie {
         templates: '++id, order',
       })
       .upgrade((tx) => tx.table('templates').bulkAdd(DEFAULT_TEMPLATES))
+    this.version(3).stores({ kv: 'key' })
     this.on('populate', (tx) => {
       tx.table('areas').bulkAdd(DEFAULT_AREAS)
       tx.table('templates').bulkAdd(DEFAULT_TEMPLATES)

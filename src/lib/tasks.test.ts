@@ -63,3 +63,23 @@ describe('parseTags', () => {
     expect(parseTags('ปั๊ม, #ไลน์3,ปั๊ม , ')).toEqual(['ปั๊ม', 'ไลน์3'])
   })
 })
+
+describe('checklists', () => {
+  beforeEach(async () => {
+    await db.tasks.clear()
+  })
+  it('come back unticked on the next occurrence of a repeating task', async () => {
+    const checklist = [
+      { id: 'a', text: 'เช็คแรงดัน', done: true },
+      { id: 'b', text: 'ระบายน้ำ', done: true },
+    ]
+    const id = await db.tasks.add(newTask({ title: 'PM', areaId: 1, dueDate: '2026-11-02', recurrence: 'weekly', checklist }))
+    const nextId = await completeTask((await db.tasks.get(id))!, 1000, '2026-11-02')
+    expect((await db.tasks.get(nextId!))!.checklist!.map((c) => c.done)).toEqual([false, false])
+    expect((await db.tasks.get(id))!.checklist!.every((c) => c.done)).toBe(true)
+  })
+  it('are searchable', () => {
+    const t = newTask({ title: 'PM', areaId: 1, checklist: [{ id: 'a', text: 'ระบายน้ำถังลม', done: false }] })
+    expect(matches(t, { view: 'all', query: 'ถังลม' })).toBe(true)
+  })
+})

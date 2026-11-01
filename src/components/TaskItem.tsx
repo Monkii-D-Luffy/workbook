@@ -1,6 +1,6 @@
 import type { Area, Task } from '../db'
 import { formatDue, todayISO, RECURRENCE_LABEL } from '../lib/dates'
-import { completeTask, reopenTask } from '../lib/tasks'
+import { completeTask, reopenTask, toggleChecklistItem } from '../lib/tasks'
 
 const PRIORITY_STYLE = { 1: 'border-red-500 bg-red-50', 2: 'border-slate-400', 3: 'border-slate-300' } as const
 
@@ -26,7 +26,8 @@ export function TaskItem({ task, area, onOpen, meetingTitle, onOpenMeeting }: Pr
       >
         {done && <span className="block text-center text-[11px] leading-4 text-white">✓</span>}
       </button>
-      <button className="min-w-0 flex-1 text-left" onClick={onOpen}>
+      <div className="min-w-0 flex-1">
+      <button className="w-full text-left" onClick={onOpen}>
         <div className={`text-sm ${done ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
           {task.priority === 1 && !done && <span className="mr-1.5 font-semibold text-red-600">P1</span>}
           {task.title}
@@ -36,6 +37,11 @@ export function TaskItem({ task, area, onOpen, meetingTitle, onOpenMeeting }: Pr
             <span className={overdue ? 'font-semibold text-red-600' : task.dueDate === today ? 'font-semibold text-blue-700' : ''}>
               {formatDue(task.dueDate, today)}
               {task.dueTime && ` ${task.dueTime}`}
+            </span>
+          )}
+          {task.checklist && task.checklist.length > 0 && (
+            <span className={task.checklist.every((c) => c.done) ? 'text-green-700' : ''}>
+              ☑ {task.checklist.filter((c) => c.done).length}/{task.checklist.length}
             </span>
           )}
           {task.assignee && <span className="font-medium text-slate-700">@{task.assignee}</span>}
@@ -56,6 +62,19 @@ export function TaskItem({ task, area, onOpen, meetingTitle, onOpenMeeting }: Pr
           ))}
         </div>
       </button>
+      {!done && task.checklist && task.checklist.some((c) => !c.done) && (
+        <ul className="mt-1.5 flex flex-col gap-0.5">
+          {task.checklist.map((c) => (
+            <li key={c.id}>
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+                <input type="checkbox" checked={c.done} onChange={() => toggleChecklistItem(task, c.id)} className="h-3.5 w-3.5" />
+                <span className={c.done ? 'text-slate-400 line-through' : ''}>{c.text}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+      </div>
       {meetingTitle && onOpenMeeting && (
         <button
           onClick={onOpenMeeting}

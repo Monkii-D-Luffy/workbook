@@ -74,8 +74,8 @@ export function Sidebar({ onMeetings, onShowMeetings, openActionItems, filter, a
       )}
       <div className="mt-auto">
         <button className={item(false)} onClick={onOpenBackup}>
-          <span>สำรอง / กู้คืนข้อมูล</span>
-          {backupOverdue && <span className="h-2 w-2 rounded-full bg-amber-500" title="ยังไม่ได้สำรองข้อมูลเกิน 7 วัน" />}
+          <span>ตั้งค่า / สำรองข้อมูล</span>
+          {backupOverdue && <span className="h-2 w-2 rounded-full bg-amber-500" title="ต้องสำรองข้อมูล" />}
         </button>
       </div>
     </aside>

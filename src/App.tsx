@@ -4,7 +4,10 @@ import { db, type Meeting, type MeetingTemplate, type Task } from './db'
 import { Sidebar } from './components/Sidebar'
 import { TaskItem } from './components/TaskItem'
 import { TaskEditor } from './components/TaskEditor'
-import { BackupDialog } from './components/BackupDialog'
+import { SettingsDialog } from './components/SettingsDialog'
+import { loadReminderSettings, useAutoBackup, useReminders } from './lib/useBackground'
+import { saveReminderSettings, type ReminderSettings } from './lib/reminders'
+import { regrantBackupFolder } from './lib/autobackup'
 import { MeetingList } from './components/MeetingList'
 import { MeetingEditor } from './components/MeetingEditor'
 import { compareTasks, matches, newTask, type Filter, type View } from './lib/tasks'
@@ -31,6 +34,8 @@ export default function App() {
   const [filter, setFilter] = useState<Filter>({ view: 'today' })
   const [editing, setEditing] = useState<Task | 'new' | null>(null)
   const [backupOpen, setBackupOpen] = useState(false)
+  const [reminders, setReminders] = useState<ReminderSettings>(loadReminderSettings)
+  const [folderRefresh, setFolderRefresh] = useState(0)
   const [quick, setQuick] = useState('')
   const today = todayISO()
 
@@ -76,8 +81,11 @@ export default function App() {
     () => meetings.filter((m) => meetingMatches(m, filter.query, filter.areaId)).sort(compareMeetings),
     [meetings, filter.query, filter.areaId],
   )
+  useReminders(tasks, reminders)
+  const folder = useAutoBackup(tasks, meetings, folderRefresh)
   const lastBackup = getLastBackupAt()
-  const backupOverdue = tasks.length + meetings.length > 0 && (!lastBackup || Date.now() - lastBackup > WEEK)
+  const backupOverdue =
+    folder.state === 'prompt' || (tasks.length + meetings.length > 0 && (!lastBackup || Date.now() - lastBackup > WEEK))
 
   const defaultAreaId = filter.areaId ?? areas.find((a) => a.name === 'ส่วนตัว')?.id ?? areas[0]?.id ?? 1
 
@@ -164,6 +172,17 @@ export default function App() {
           </button>
         </header>
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-6 py-5">
+          {folder.state === 'prompt' && (
+            <button
+              onClick={async () => {
+                await regrantBackupFolder()
+                setFolderRefresh((n) => n + 1)
+              }}
+              className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-left text-sm text-amber-900 hover:bg-amber-100"
+            >
+              สำรองอัตโนมัติหยุดชั่วคราว เพราะเบราว์เซอร์ขออนุญาตเข้าโฟลเดอร์อีกครั้ง <span className="font-semibold underline">กดตรงนี้เพื่ออนุญาต</span>
+            </button>
+          )}
           {page.kind === 'meeting' && (
             <MeetingEditor
               key={page.id}
@@ -226,7 +245,19 @@ export default function App() {
           onClose={() => setEditing(null)}
         />
       )}
-      {backupOpen && <BackupDialog onClose={() => setBackupOpen(false)} />}
+      {backupOpen && (
+        <SettingsDialog
+          reminders={reminders}
+          onRemindersChange={(r) => {
+            setReminders(r)
+            saveReminderSettings(r)
+          }}
+          folderState={folder.state}
+          folderError={folder.lastError}
+          onFolderChanged={() => setFolderRefresh((n) => n + 1)}
+          onClose={() => setBackupOpen(false)}
+        />
+      )}
       <datalist id="people">
         {people.map((p) => (
           <option key={p} value={p} />

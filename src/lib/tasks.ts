@@ -27,7 +27,9 @@ export function newTask(partial: Partial<Task> & { title: string; areaId: number
 
 /** Lower-case text used for search. Plain substring match works for Thai, which has no spaces between words. */
 export function searchText(t: Task): string {
-  return [t.title, t.notes, t.assignee ?? '', ...t.tags, ...Object.values(t.extra)].join(' ').toLowerCase()
+  return [t.title, t.notes, t.assignee ?? '', ...t.tags, ...Object.values(t.extra), ...(t.checklist ?? []).map((c) => c.text)]
+    .join(' ')
+    .toLowerCase()
 }
 
 export function matches(t: Task, f: Filter, today = todayISO()): boolean {
@@ -72,7 +74,8 @@ export async function completeTask(task: Task, now = Date.now(), today = todayIS
     const next = nextDueDate(task.dueDate, task.recurrence, today)
     if (!next) return undefined
     const { id: _id, completedAt: _c, ...rest } = task
-    return db.tasks.add({ ...rest, status: 'todo', dueDate: next, createdAt: now, updatedAt: now })
+    const checklist = rest.checklist?.map((c) => ({ ...c, done: false }))
+    return db.tasks.add({ ...rest, checklist, status: 'todo', dueDate: next, createdAt: now, updatedAt: now })
   })
 }
 
@@ -85,4 +88,12 @@ export const RECURRENCES: Recurrence[] = ['none', 'daily', 'weekdays', 'weekly',
 
 export function parseTags(s: string): string[] {
   return [...new Set(s.split(/[,#]/).map((x) => x.trim()).filter(Boolean))]
+}
+
+export const newChecklistId = () => Math.random().toString(36).slice(2, 10)
+
+/** Toggle one checklist item straight from the list, without opening the editor. */
+export async function toggleChecklistItem(task: Task, itemId: string): Promise<void> {
+  const checklist = (task.checklist ?? []).map((c) => (c.id === itemId ? { ...c, done: !c.done } : c))
+  await db.tasks.update(task.id!, { checklist, updatedAt: Date.now() })
 }
