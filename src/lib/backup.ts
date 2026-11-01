@@ -1,26 +1,31 @@
-import { db, type Area, type Task } from '../db'
+import { db, DEFAULT_TEMPLATES, type Area, type Meeting, type MeetingTemplate, type Task } from '../db'
 
 export interface Backup {
   app: 'workbook'
-  version: 1
+  version: 1 | 2
   exportedAt: string
   areas: Area[]
   tasks: Task[]
+  /** Added in version 2 */
+  meetings?: Meeting[]
+  templates?: MeetingTemplate[]
 }
 
 export async function exportBackup(): Promise<Backup> {
   return {
     app: 'workbook',
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     areas: await db.areas.toArray(),
     tasks: await db.tasks.toArray(),
+    meetings: await db.meetings.toArray(),
+    templates: await db.templates.toArray(),
   }
 }
 
 export function validateBackup(data: unknown): Backup {
   const b = data as Backup
-  if (!b || b.app !== 'workbook' || b.version !== 1 || !Array.isArray(b.areas) || !Array.isArray(b.tasks)) {
+  if (!b || b.app !== 'workbook' || ![1, 2].includes(b.version) || !Array.isArray(b.areas) || !Array.isArray(b.tasks)) {
     throw new Error('ไฟล์นี้ไม่ใช่ไฟล์สำรองของ Workbook')
   }
   return b
@@ -28,11 +33,12 @@ export function validateBackup(data: unknown): Backup {
 
 /** Replace everything in the database with the backup's contents. */
 export async function restoreBackup(b: Backup): Promise<void> {
-  await db.transaction('rw', db.areas, db.tasks, async () => {
-    await db.tasks.clear()
-    await db.areas.clear()
+  await db.transaction('rw', [db.areas, db.tasks, db.meetings, db.templates], async () => {
+    await Promise.all([db.tasks.clear(), db.areas.clear(), db.meetings.clear(), db.templates.clear()])
     await db.areas.bulkAdd(b.areas)
     await db.tasks.bulkAdd(b.tasks)
+    await db.meetings.bulkAdd(b.meetings ?? [])
+    await db.templates.bulkAdd(b.templates?.length ? b.templates : DEFAULT_TEMPLATES)
   })
 }
 

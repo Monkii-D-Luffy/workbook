@@ -9,16 +9,20 @@ const VIEWS: { view: View; label: string }[] = [
 ]
 
 interface Props {
+  onMeetings: boolean
+  onShowMeetings: () => void
+  openActionItems: number
   filter: Filter
   areas: Area[]
   tags: string[]
   counts: Record<View, number>
-  onChange: (f: Filter) => void
+  /** toTasks: the click should leave the meetings page */
+  onChange: (f: Filter, toTasks?: boolean) => void
   onOpenBackup: () => void
   backupOverdue: boolean
 }
 
-export function Sidebar({ filter, areas, tags, counts, onChange, onOpenBackup, backupOverdue }: Props) {
+export function Sidebar({ onMeetings, onShowMeetings, openActionItems, filter, areas, tags, counts, onChange, onOpenBackup, backupOverdue }: Props) {
   const item = (active: boolean) =>
     `flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left text-sm ${
       active ? 'bg-blue-100 font-semibold text-blue-800' : 'text-slate-700 hover:bg-slate-200/60'
@@ -28,11 +32,15 @@ export function Sidebar({ filter, areas, tags, counts, onChange, onOpenBackup, b
       <div className="px-3 pt-1 text-lg font-bold text-blue-700">Workbook</div>
       <nav className="flex flex-col gap-0.5" aria-label="มุมมอง">
         {VIEWS.map((v) => (
-          <button key={v.view} className={item(filter.view === v.view)} onClick={() => onChange({ ...filter, view: v.view })}>
+          <button key={v.view} className={item(!onMeetings && filter.view === v.view)} onClick={() => onChange({ ...filter, view: v.view }, true)}>
             <span>{v.label}</span>
             {v.view !== 'done' && counts[v.view] > 0 && <span className="text-xs text-slate-500">{counts[v.view]}</span>}
           </button>
         ))}
+        <button className={`${item(onMeetings)} mt-2`} onClick={onShowMeetings}>
+          <span>บันทึกประชุม</span>
+          {openActionItems > 0 && <span className="text-xs text-amber-700" title="Action Item ที่ยังไม่เสร็จ">{openActionItems}</span>}
+        </button>
       </nav>
       <div>
         <div className="px-3 pb-1 text-xs font-semibold text-slate-500">พื้นที่งาน</div>
@@ -55,7 +63,7 @@ export function Sidebar({ filter, areas, tags, counts, onChange, onOpenBackup, b
             {tags.map((t) => (
               <button
                 key={t}
-                onClick={() => onChange({ ...filter, tag: filter.tag === t ? undefined : t })}
+                onClick={() => onChange({ ...filter, tag: filter.tag === t ? undefined : t }, true)}
                 className={`rounded-full px-2 py-0.5 text-xs ${filter.tag === t ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
               >
                 #{t}

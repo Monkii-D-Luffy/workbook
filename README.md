@@ -20,5 +20,5 @@ Push ขึ้น `main` แล้ว GitHub Actions จะ build และ depl
 
 ## สถานะ
 - [x] เฟส 0–1: To-do, วันครบกำหนด, Priority, Tag, พื้นที่งานพร้อมฟิลด์เฉพาะ, งานซ้ำ, หน้าวันนี้, ค้นหาภาษาไทย, สำรอง/กู้คืน
-- [ ] เฟส 2: บันทึกประชุม + เทมเพลต + Action Item → To-do
+- [x] เฟส 2: บันทึกประชุม 5 เทมเพลต (Daily Maintenance, Breakdown 5 WHY, Weekly PM, Content Planning, ทั่วไป), ผู้เข้าร่วม, Action Item → To-do พร้อมลิงก์กลับ
 - [ ] เฟส 3: แจ้งเตือน Windows, สำรองอัตโนมัติลงโฟลเดอร์

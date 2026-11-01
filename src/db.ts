@@ -33,16 +33,50 @@ export interface Task {
   recurrence: Recurrence
   /** Area-specific fields, keyed by AreaField.key */
   extra: Record<string, string>
-  /** Set when the task came from a meeting action item (phase 2) */
+  /** Who does it, by name (people from meetings need no account) */
+  assignee?: string
+  /** Set when the task came from a meeting action item */
   meetingId?: number
   createdAt: number
   updatedAt: number
   completedAt?: number
 }
 
+export interface MeetingSection {
+  heading: string
+  /** Hint shown in the empty box */
+  hint?: string
+  body: string
+}
+
+export interface MeetingTemplate {
+  id?: number
+  name: string
+  areaName?: string
+  sections: Omit<MeetingSection, 'body'>[]
+  order: number
+}
+
+export interface Meeting {
+  id?: number
+  title: string
+  /** YYYY-MM-DD */
+  date: string
+  /** HH:MM */
+  time?: string
+  areaId: number
+  templateId?: number
+  attendees: string[]
+  sections: MeetingSection[]
+  createdAt: number
+  updatedAt: number
+}
+
 export class WorkbookDB extends Dexie {
   tasks!: Table<Task, number>
   areas!: Table<Area, number>
+  meetings!: Table<Meeting, number>
+  templates!: Table<MeetingTemplate, number>
 
   constructor(name = 'workbook') {
     super(name)
@@ -50,8 +84,15 @@ export class WorkbookDB extends Dexie {
       tasks: '++id, status, dueDate, areaId, priority, *tags, meetingId, completedAt',
       areas: '++id, order',
     })
+    this.version(2)
+      .stores({
+        meetings: '++id, date, areaId, templateId',
+        templates: '++id, order',
+      })
+      .upgrade((tx) => tx.table('templates').bulkAdd(DEFAULT_TEMPLATES))
     this.on('populate', (tx) => {
       tx.table('areas').bulkAdd(DEFAULT_AREAS)
+      tx.table('templates').bulkAdd(DEFAULT_TEMPLATES)
     })
   }
 }
@@ -78,6 +119,63 @@ export const DEFAULT_AREAS: Area[] = [
     ],
   },
   { name: 'ส่วนตัว', color: '#16a34a', order: 3, fields: [] },
+]
+
+export const DEFAULT_TEMPLATES: MeetingTemplate[] = [
+  {
+    name: 'Daily Maintenance Meeting',
+    areaName: 'ซ่อมบำรุง',
+    order: 1,
+    sections: [
+      { heading: 'Breakdown 24 ชม. ที่ผ่านมา', hint: 'เครื่อง / อาการ / Downtime (นาที) / สถานะ' },
+      { heading: 'งานค้างจากเมื่อวาน' },
+      { heading: 'งาน PM วันนี้' },
+      { heading: 'อะไหล่และปัญหาที่ต้องตาม' },
+      { heading: 'อื่นๆ' },
+    ],
+  },
+  {
+    name: 'Breakdown Review (5 WHY)',
+    areaName: 'ซ่อมบำรุง',
+    order: 2,
+    sections: [
+      { heading: 'ปรากฏการณ์', hint: 'เครื่อง, เวลาเกิด, อาการที่เห็น' },
+      { heading: 'ผลกระทบ', hint: 'Downtime (นาที), ของเสีย, ความปลอดภัย' },
+      { heading: '5 WHY', hint: 'Why 1:\nWhy 2:\nWhy 3:\nWhy 4:\nWhy 5:' },
+      { heading: 'Root Cause (6M)', hint: 'Man / Machine / Method / Material / Measurement / Mother Nature' },
+      { heading: 'Corrective Action', hint: 'แก้ทันทีให้เครื่องกลับมาเดิน' },
+      { heading: 'Preventive Action', hint: 'ป้องกันไม่ให้เกิดซ้ำ: ปรับ PM, Standard, Training' },
+    ],
+  },
+  {
+    name: 'Weekly PM Review',
+    areaName: 'ซ่อมบำรุง',
+    order: 3,
+    sections: [
+      { heading: 'PM Compliance', hint: 'แผน __ งาน / ทำจริง __ งาน = __%' },
+      { heading: 'KPI สัปดาห์นี้', hint: 'MTBF / MTTR / Availability / OEE' },
+      { heading: 'ปัญหาซ้ำ (Bad Actor)' },
+      { heading: 'งานค้าง' },
+      { heading: 'แผนสัปดาห์หน้า' },
+    ],
+  },
+  {
+    name: 'Content Planning',
+    areaName: 'คอนเทนต์',
+    order: 4,
+    sections: [
+      { heading: 'สินค้า / เป้าหมาย', hint: 'สินค้า, ค่าคอม, กลุ่มเป้าหมาย' },
+      { heading: 'Hook 3 วินาทีแรก', hint: 'ไอเดีย Hook อย่างน้อย 3 แบบ' },
+      { heading: 'โครงสคริปต์', hint: 'Pain → Solution → CTA, แบ่งซีน' },
+      { heading: 'ตารางโพสต์' },
+      { heading: 'ผลลัพธ์รอบก่อน', hint: 'Views / CTR / Conversion' },
+    ],
+  },
+  {
+    name: 'ประชุมทั่วไป',
+    order: 5,
+    sections: [{ heading: 'วาระ' }, { heading: 'สรุปการหารือ' }, { heading: 'มติ' }],
+  },
 ]
 
 export const db = new WorkbookDB()

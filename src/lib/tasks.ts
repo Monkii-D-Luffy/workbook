@@ -27,7 +27,7 @@ export function newTask(partial: Partial<Task> & { title: string; areaId: number
 
 /** Lower-case text used for search. Plain substring match works for Thai, which has no spaces between words. */
 export function searchText(t: Task): string {
-  return [t.title, t.notes, ...t.tags, ...Object.values(t.extra)].join(' ').toLowerCase()
+  return [t.title, t.notes, t.assignee ?? '', ...t.tags, ...Object.values(t.extra)].join(' ').toLowerCase()
 }
 
 export function matches(t: Task, f: Filter, today = todayISO()): boolean {

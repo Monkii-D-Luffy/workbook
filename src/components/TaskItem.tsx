@@ -4,7 +4,15 @@ import { completeTask, reopenTask } from '../lib/tasks'
 
 const PRIORITY_STYLE = { 1: 'border-red-500 bg-red-50', 2: 'border-slate-400', 3: 'border-slate-300' } as const
 
-export function TaskItem({ task, area, onOpen }: { task: Task; area?: Area; onOpen: () => void }) {
+interface Props {
+  task: Task
+  area?: Area
+  onOpen: () => void
+  meetingTitle?: string
+  onOpenMeeting?: () => void
+}
+
+export function TaskItem({ task, area, onOpen, meetingTitle, onOpenMeeting }: Props) {
   const today = todayISO()
   const done = task.status === 'done'
   const overdue = !done && !!task.dueDate && task.dueDate < today
@@ -30,6 +38,7 @@ export function TaskItem({ task, area, onOpen }: { task: Task; area?: Area; onOp
               {task.dueTime && ` ${task.dueTime}`}
             </span>
           )}
+          {task.assignee && <span className="font-medium text-slate-700">@{task.assignee}</span>}
           {task.recurrence !== 'none' && <span>↻ {RECURRENCE_LABEL[task.recurrence]}</span>}
           {area && (
             <span className="flex items-center gap-1">
@@ -47,6 +56,15 @@ export function TaskItem({ task, area, onOpen }: { task: Task; area?: Area; onOp
           ))}
         </div>
       </button>
+      {meetingTitle && onOpenMeeting && (
+        <button
+          onClick={onOpenMeeting}
+          title="เปิดบันทึกประชุมที่สั่งงานนี้"
+          className="max-w-44 shrink-0 truncate rounded bg-amber-50 px-2 py-0.5 text-xs text-amber-800 hover:bg-amber-100"
+        >
+          จากประชุม: {meetingTitle}
+        </button>
+      )}
     </li>
   )
 }

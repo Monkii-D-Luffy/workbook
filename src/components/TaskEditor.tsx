@@ -18,6 +18,7 @@ export function TaskEditor({ task, areas, defaultAreaId, onClose }: Props) {
   const [priority, setPriority] = useState<Priority>(task?.priority ?? 2)
   const [areaId, setAreaId] = useState(task?.areaId ?? defaultAreaId)
   const [tags, setTags] = useState(task?.tags.join(', ') ?? '')
+  const [assignee, setAssignee] = useState(task?.assignee ?? '')
   const [recurrence, setRecurrence] = useState<Recurrence>(task?.recurrence ?? 'none')
   const [extra, setExtra] = useState<Record<string, string>>(task?.extra ?? {})
   const area = areas.find((a) => a.id === areaId)
@@ -35,6 +36,7 @@ export function TaskEditor({ task, areas, defaultAreaId, onClose }: Props) {
       priority,
       areaId,
       tags: parseTags(tags),
+      assignee: assignee.trim() || undefined,
       recurrence,
       extra: keep,
     }
@@ -97,6 +99,10 @@ export function TaskEditor({ task, areas, defaultAreaId, onClose }: Props) {
           <label className={label}>
             แท็ก (คั่นด้วย ,)
             <input value={tags} placeholder="เช่น ปั๊ม, ไลน์3" onChange={(e) => setTags(e.target.value)} />
+          </label>
+          <label className={label}>
+            ผู้รับผิดชอบ
+            <input value={assignee} list="people" placeholder="เว้นว่าง = ตัวเอง" onChange={(e) => setAssignee(e.target.value)} />
           </label>
           {area?.fields.map((f) => (
             <label key={f.key} className={label}>
