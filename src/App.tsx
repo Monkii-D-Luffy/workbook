@@ -239,6 +239,9 @@ export default function App() {
               meetingId={page.id}
               areas={areas}
               people={people}
+              meetings={meetings}
+              tasks={tasks}
+              onOpenMeeting={openMeeting}
               onBack={() => setPage({ kind: 'meetings' })}
               onOpenTask={setEditing}
             />
@@ -249,6 +252,7 @@ export default function App() {
               templates={templates}
               areaById={areaById}
               openItemsByMeeting={openItemsByMeeting}
+              query={filter.query}
               onOpen={openMeeting}
               onCreate={createMeeting}
             />

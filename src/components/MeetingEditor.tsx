@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, type Area, type Meeting, type Priority, type Task } from '../db'
-import { addActionItem, deleteMeeting } from '../lib/meetings'
+import { db, type Area, type Decision, type Meeting, type Priority, type Task } from '../db'
+import { addActionItem, carriedActionItems, createNextMeeting, deleteMeeting, seriesOf } from '../lib/meetings'
+import { formatDue } from '../lib/dates'
+import { newChecklistId } from '../lib/tasks'
+import { TypeBadge } from './MeetingList'
 import { compareTasks, PRIORITY_LABEL } from '../lib/tasks'
 import { TaskItem } from './TaskItem'
 
@@ -9,11 +12,14 @@ interface Props {
   meetingId: number
   areas: Area[]
   people: string[]
+  meetings: Meeting[]
+  tasks: Task[]
+  onOpenMeeting: (id: number) => void
   onBack: () => void
   onOpenTask: (t: Task) => void
 }
 
-export function MeetingEditor({ meetingId, areas, people, onBack, onOpenTask }: Props) {
+export function MeetingEditor({ meetingId, areas, people, meetings, tasks, onOpenMeeting, onBack, onOpenTask }: Props) {
   const stored = useLiveQuery(() => db.meetings.get(meetingId), [meetingId])
   const items = useLiveQuery(() => db.tasks.where('meetingId').equals(meetingId).toArray(), [meetingId], [] as Task[])
   const [draft, setDraft] = useState<Meeting | null>(null)
@@ -31,7 +37,7 @@ export function MeetingEditor({ meetingId, areas, people, onBack, onOpenTask }: 
   useEffect(() => {
     if (!draft || saved) return
     const t = setTimeout(async () => {
-      await db.meetings.put({ ...draft, updatedAt: Date.now() })
+      await persist(draft)
       setSaved(true)
     }, 400)
     return () => clearTimeout(t)
@@ -42,7 +48,7 @@ export function MeetingEditor({ meetingId, areas, people, onBack, onOpenTask }: 
   pending.current = saved ? null : draft
   useEffect(
     () => () => {
-      if (pending.current) db.meetings.put({ ...pending.current, updatedAt: Date.now() })
+      if (pending.current) persist(pending.current)
     },
     [],
   )
@@ -55,6 +61,22 @@ export function MeetingEditor({ meetingId, areas, people, onBack, onOpenTask }: 
     setSaved(false)
   }
   const label = 'flex flex-col gap-1 text-xs font-medium text-slate-600'
+  // Series links read the stored copy so a seriesId set by "next meeting" shows at once.
+  const current = { ...draft, seriesId: stored?.seriesId ?? draft.seriesId }
+  const series = seriesOf(current, meetings.map((m) => (m.id === meetingId ? current : m)))
+  const pos = series.findIndex((m) => m.id === meetingId)
+  const prev = pos > 0 ? series[pos - 1] : undefined
+  const next = pos >= 0 && pos < series.length - 1 ? series[pos + 1] : undefined
+  const carried = carriedActionItems(current, meetings, tasks)
+
+  async function goNext() {
+    if (!saved) {
+      await persist(draft!)
+      setSaved(true)
+    }
+    const id = await createNextMeeting({ ...current, id: meetingId })
+    onOpenMeeting(id)
+  }
 
   async function remove() {
     const n = items.length
@@ -67,6 +89,7 @@ export function MeetingEditor({ meetingId, areas, people, onBack, onOpenTask }: 
     <div className="flex flex-col gap-5">
       <div className="flex items-center gap-3 text-sm">
         <button onClick={onBack} className="text-blue-700 hover:underline">← บันทึกประชุมทั้งหมด</button>
+        <TypeBadge type={draft.type} />
         <span className="flex-1 text-right text-xs text-slate-400">{saved ? 'บันทึกแล้ว' : 'กำลังบันทึก…'}</span>
         <button onClick={remove} className="rounded-md px-2 py-1 text-xs text-red-600 hover:bg-red-50">ลบบันทึกนี้</button>
       </div>
@@ -94,6 +117,41 @@ export function MeetingEditor({ meetingId, areas, people, onBack, onOpenTask }: 
           </select>
         </label>
       </div>
+      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm">
+        {series.length > 1 && <span className="text-xs text-slate-500">ครั้งที่ {pos + 1} จาก {series.length}</span>}
+        {prev && (
+          <button onClick={() => onOpenMeeting(prev.id!)} className="text-blue-700 hover:underline">
+            ‹ ครั้งก่อน ({formatDue(prev.date)})
+          </button>
+        )}
+        {next && (
+          <button onClick={() => onOpenMeeting(next.id!)} className="text-blue-700 hover:underline">
+            ครั้งถัดไป ({formatDue(next.date)}) ›
+          </button>
+        )}
+        <span className="flex-1" />
+        <button onClick={goNext} className="rounded-md border border-slate-300 bg-white px-3 py-1 text-sm hover:bg-slate-50">
+          + สร้างครั้งถัดไป
+        </button>
+      </div>
+      {carried.length > 0 && (
+        <section className="rounded-lg border border-red-200 bg-red-50/40 p-4">
+          <h2 className="mb-1 text-sm font-semibold text-slate-800">Action Item ค้างจากครั้งก่อน ({carried.length})</h2>
+          <p className="mb-2 text-xs text-slate-500">ไล่ถามความคืบหน้าในประชุมนี้ กดวงกลมเมื่อเสร็จ</p>
+          <ul className="flex flex-col gap-2">
+            {carried.map(({ task, from }) => (
+              <TaskItem
+                key={task.id}
+                task={task}
+                area={areas.find((a) => a.id === task.areaId)}
+                onOpen={() => onOpenTask(task)}
+                meetingTitle={formatDue(from.date)}
+                onOpenMeeting={() => onOpenMeeting(from.id!)}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
       <Attendees value={draft.attendees} people={people} onChange={(attendees) => set({ attendees })} />
       {draft.sections.map((s, i) => (
         <label key={i} className={label}>
@@ -107,6 +165,7 @@ export function MeetingEditor({ meetingId, areas, people, onBack, onOpenTask }: 
           />
         </label>
       ))}
+      <Decisions value={draft.decisions ?? []} onChange={(decisions) => set({ decisions })} />
       <ActionItems
         items={[...items].sort(compareTasks)}
         people={[...new Set([...draft.attendees, ...people])]}
@@ -115,6 +174,52 @@ export function MeetingEditor({ meetingId, areas, people, onBack, onOpenTask }: 
         areas={areas}
       />
     </div>
+  )
+}
+
+/** Save only what the editor changes, so fields set elsewhere (the series link) are never overwritten. */
+function persist(m: Meeting) {
+  const { title, date, time, areaId, attendees, sections, decisions } = m
+  return db.meetings.update(m.id!, { title, date, time, areaId, attendees, sections, decisions, updatedAt: Date.now() })
+}
+
+function Decisions({ value, onChange }: { value: Decision[]; onChange: (v: Decision[]) => void }) {
+  const [text, setText] = useState('')
+  return (
+    <section className="rounded-lg border border-violet-200 bg-violet-50/40 p-4">
+      <h2 className="mb-1 text-sm font-semibold text-slate-800">มติ / การตัดสินใจ</h2>
+      <p className="mb-2 text-xs text-slate-500">ทุกข้อจะไปรวมใน Decision Log ค้นย้อนหลังได้ว่าตกลงหรืออนุมัติอะไรเมื่อไหร่</p>
+      <ul className="mb-2 flex flex-col gap-1.5">
+        {value.map((d, i) => (
+          <li key={d.id} className="flex items-center gap-2">
+            <span className="w-5 text-right text-xs text-slate-400">{i + 1}.</span>
+            <input
+              aria-label={`มติข้อ ${i + 1}`}
+              value={d.text}
+              onChange={(e) => onChange(value.map((x) => (x.id === d.id ? { ...x, text: e.target.value } : x)))}
+              className="flex-1 py-1"
+            />
+            <button aria-label={`ลบมติข้อ ${i + 1}`} onClick={() => onChange(value.filter((x) => x.id !== d.id))} className="px-1 text-slate-400 hover:text-red-600">
+              ×
+            </button>
+          </li>
+        ))}
+      </ul>
+      <input
+        aria-label="เพิ่มมติ"
+        placeholder="+ เช่น อนุมัติงบเปลี่ยนปั๊ม CW-02 80,000 บาท แล้วกด Enter"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            if (text.trim()) onChange([...value, { id: newChecklistId(), text: text.trim() }])
+            setText('')
+          }
+        }}
+        className="w-full py-1"
+      />
+    </section>
   )
 }
 
