@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Meeting, type MeetingTemplate, type Task } from './db'
-import { Sidebar } from './components/Sidebar'
+import { Sidebar, type Section } from './components/Sidebar'
+import { Board } from './components/Board'
+import { CalendarView } from './components/CalendarView'
+import { ContentTracker } from './components/ContentTracker'
 import { TaskItem } from './components/TaskItem'
 import { TaskEditor } from './components/TaskEditor'
 import { SettingsDialog } from './components/SettingsDialog'
@@ -23,7 +26,14 @@ const TITLES: Record<View, string> = {
 }
 const WEEK = 7 * 24 * 3600 * 1000
 
-type Page = { kind: 'tasks' } | { kind: 'meetings' } | { kind: 'meeting'; id: number }
+type Page = { kind: Section } | { kind: 'meeting'; id: number }
+type Editing = Task | { new: Partial<Task> } | null
+const SECTION_TITLES: Record<Exclude<Section, 'tasks'>, string> = {
+  board: 'บอร์ด',
+  calendar: 'ปฏิทิน',
+  content: 'Content Tracker',
+  meetings: 'บันทึกประชุม',
+}
 
 export default function App() {
   const areas = useLiveQuery(() => db.areas.orderBy('order').toArray(), [], [])
@@ -32,7 +42,7 @@ export default function App() {
   const templates = useLiveQuery(() => db.templates.orderBy('order').toArray(), [], [] as MeetingTemplate[])
   const [page, setPage] = useState<Page>({ kind: 'tasks' })
   const [filter, setFilter] = useState<Filter>({ view: 'today' })
-  const [editing, setEditing] = useState<Task | 'new' | null>(null)
+  const [editing, setEditing] = useState<Editing>(null)
   const [backupOpen, setBackupOpen] = useState(false)
   const [reminders, setReminders] = useState<ReminderSettings>(loadReminderSettings)
   const [folderRefresh, setFolderRefresh] = useState(0)
@@ -48,7 +58,7 @@ export default function App() {
         document.getElementById('search')?.focus()
       } else if (!typing && e.key === 'n' && !editing) {
         e.preventDefault()
-        setEditing('new')
+        setEditing({ new: {} })
       }
     }
     window.addEventListener('keydown', onKey)
@@ -87,7 +97,9 @@ export default function App() {
   const backupOverdue =
     folder.state === 'prompt' || (tasks.length + meetings.length > 0 && (!lastBackup || Date.now() - lastBackup > WEEK))
 
-  const defaultAreaId = filter.areaId ?? areas.find((a) => a.name === 'ส่วนตัว')?.id ?? areas[0]?.id ?? 1
+  const defaultAreaId = filter.areaId ?? areas.find((a) => a.kind === 'personal')?.id ?? areas[0]?.id ?? 1
+  const boardArea = areaById.get(filter.areaId ?? -1) ?? areas[0]
+  const contentArea = (filter.areaId && areaById.get(filter.areaId)?.kind === 'content' ? areaById.get(filter.areaId) : undefined) ?? areas.find((a) => a.kind === 'content')
 
   async function quickAdd(e: React.FormEvent) {
     e.preventDefault()
@@ -126,19 +138,24 @@ export default function App() {
   const heading =
     page.kind === 'meeting'
       ? 'บันทึกประชุม'
-      : filter.query
+      : filter.query && (page.kind === 'tasks' || page.kind === 'meetings')
         ? `ผลการค้นหา "${filter.query}"`
-        : page.kind === 'meetings'
-          ? `บันทึกประชุม${areaSuffix}`
-          : `${TITLES[filter.view]}${areaSuffix}${filter.tag ? ` · #${filter.tag}` : ''}`
+        : page.kind === 'board'
+          ? `บอร์ด · ${boardArea?.name ?? ''}`
+          : page.kind === 'content'
+            ? `Content Tracker · ${contentArea?.name ?? ''}`
+            : page.kind !== 'tasks'
+              ? `${SECTION_TITLES[page.kind]}${areaSuffix}`
+              : `${TITLES[filter.view]}${areaSuffix}${filter.tag ? ` · #${filter.tag}` : ''}`
+  const searchable = page.kind === 'tasks' || page.kind === 'meetings' || page.kind === 'meeting'
 
   return (
     <div className="flex h-full">
       <Sidebar
-        onMeetings={page.kind !== 'tasks'}
-        onShowMeetings={() => {
+        section={page.kind === 'meeting' ? 'meetings' : page.kind}
+        onSection={(kind) => {
           setFilter({ ...filter, query: undefined })
-          setPage({ kind: 'meetings' })
+          setPage({ kind })
         }}
         openActionItems={openActionItems}
         filter={filter}
@@ -156,7 +173,7 @@ export default function App() {
       <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         <header className="sticky top-0 z-[1] flex items-center gap-3 border-b border-slate-200 bg-slate-50/90 px-6 py-3 backdrop-blur">
           <h1 className="min-w-0 flex-1 truncate text-xl font-bold">{heading}</h1>
-          <input
+          {searchable && <input
             id="search"
             type="search"
             placeholder={page.kind === 'tasks' ? 'ค้นหางาน (Ctrl+K)' : 'ค้นหาบันทึกประชุม (Ctrl+K)'}
@@ -166,12 +183,12 @@ export default function App() {
               if (page.kind === 'meeting') setPage({ kind: 'meetings' })
             }}
             className="w-64"
-          />
-          <button onClick={() => setEditing('new')} className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700">
+          />}
+          <button onClick={() => setEditing({ new: {} })} className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700">
             + งานใหม่
           </button>
         </header>
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-6 py-5">
+        <div className={`mx-auto flex w-full flex-col gap-5 px-6 py-5 ${page.kind === 'board' || page.kind === 'calendar' || page.kind === 'content' ? 'max-w-7xl' : 'max-w-3xl'}`}>
           {folder.state === 'prompt' && (
             <button
               onClick={async () => {
@@ -183,6 +200,39 @@ export default function App() {
               สำรองอัตโนมัติหยุดชั่วคราว เพราะเบราว์เซอร์ขออนุญาตเข้าโฟลเดอร์อีกครั้ง <span className="font-semibold underline">กดตรงนี้เพื่ออนุญาต</span>
             </button>
           )}
+          {page.kind === 'board' && boardArea && (
+            <>
+              <div className="flex gap-1">
+                {areas.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => setFilter({ ...filter, areaId: a.id })}
+                    className={`rounded-full px-3 py-1 text-sm ${a.id === boardArea.id ? 'bg-slate-800 text-white' : 'bg-white text-slate-700 hover:bg-slate-100'}`}
+                  >
+                    {a.name}
+                  </button>
+                ))}
+              </div>
+              <Board tasks={tasks} area={boardArea} onOpen={setEditing} onAdd={(stage) => setEditing({ new: { areaId: boardArea.id, stage } })} />
+            </>
+          )}
+          {page.kind === 'calendar' && (
+            <CalendarView
+              tasks={tasks}
+              meetings={meetings}
+              areaId={filter.areaId}
+              areaById={areaById}
+              onOpenTask={setEditing}
+              onOpenMeeting={openMeeting}
+              onAdd={(dueDate) => setEditing({ new: { dueDate } })}
+            />
+          )}
+          {page.kind === 'content' &&
+            (contentArea ? (
+              <ContentTracker tasks={tasks} area={contentArea} onOpen={setEditing} onAdd={() => setEditing({ new: { areaId: contentArea.id } })} />
+            ) : (
+              <p className="py-12 text-center text-sm text-slate-500">ไม่พบพื้นที่งานคอนเทนต์</p>
+            ))}
           {page.kind === 'meeting' && (
             <MeetingEditor
               key={page.id}
@@ -239,7 +289,8 @@ export default function App() {
       </main>
       {editing && (
         <TaskEditor
-          task={editing === 'new' ? undefined : editing}
+          task={'new' in editing ? undefined : editing}
+          defaults={'new' in editing ? editing.new : undefined}
           areas={areas}
           defaultAreaId={defaultAreaId}
           onClose={() => setEditing(null)}

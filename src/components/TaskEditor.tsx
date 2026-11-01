@@ -7,16 +7,18 @@ interface Props {
   task?: Task
   areas: Area[]
   defaultAreaId: number
+  /** Prefilled values for a new task, e.g. the day clicked in the calendar */
+  defaults?: Partial<Task>
   onClose: () => void
 }
 
-export function TaskEditor({ task, areas, defaultAreaId, onClose }: Props) {
+export function TaskEditor({ task, areas, defaultAreaId, defaults, onClose }: Props) {
   const [title, setTitle] = useState(task?.title ?? '')
   const [notes, setNotes] = useState(task?.notes ?? '')
-  const [dueDate, setDueDate] = useState(task?.dueDate ?? '')
+  const [dueDate, setDueDate] = useState(task?.dueDate ?? defaults?.dueDate ?? '')
   const [dueTime, setDueTime] = useState(task?.dueTime ?? '')
   const [priority, setPriority] = useState<Priority>(task?.priority ?? 2)
-  const [areaId, setAreaId] = useState(task?.areaId ?? defaultAreaId)
+  const [areaId, setAreaId] = useState(task?.areaId ?? defaults?.areaId ?? defaultAreaId)
   const [tags, setTags] = useState(task?.tags.join(', ') ?? '')
   const [assignee, setAssignee] = useState(task?.assignee ?? '')
   const [recurrence, setRecurrence] = useState<Recurrence>(task?.recurrence ?? 'none')
@@ -44,7 +46,7 @@ export function TaskEditor({ task, areas, defaultAreaId, onClose }: Props) {
       checklist: checklist.filter((c) => c.text.trim()),
     }
     if (task?.id) await db.tasks.update(task.id, { ...fields, updatedAt: Date.now() })
-    else await db.tasks.add(newTask(fields))
+    else await db.tasks.add(newTask({ ...fields, stage: areaId === defaults?.areaId ? defaults?.stage : undefined }))
     onClose()
   }
 
@@ -107,7 +109,7 @@ export function TaskEditor({ task, areas, defaultAreaId, onClose }: Props) {
             ผู้รับผิดชอบ
             <input value={assignee} list="people" placeholder="เว้นว่าง = ตัวเอง" onChange={(e) => setAssignee(e.target.value)} />
           </label>
-          {area?.fields.map((f) => (
+          {area?.fields.filter((f) => !f.trackerOnly).map((f) => (
             <label key={f.key} className={label}>
               {f.label}
               <input

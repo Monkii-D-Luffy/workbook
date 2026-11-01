@@ -16,7 +16,7 @@ export function TaskItem({ task, area, onOpen, meetingTitle, onOpenMeeting }: Pr
   const today = todayISO()
   const done = task.status === 'done'
   const overdue = !done && !!task.dueDate && task.dueDate < today
-  const extras = area?.fields.map((f) => task.extra[f.key]).filter(Boolean) ?? []
+  const extras = area?.fields.filter((f) => !f.trackerOnly).map((f) => task.extra[f.key]).filter(Boolean) ?? []
   return (
     <li className="group flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:border-slate-300">
       <button

@@ -7,7 +7,9 @@ export type Recurrence = 'none' | 'daily' | 'weekdays' | 'weekly' | 'monthly'
 export interface AreaField {
   key: string
   label: string
-  type: 'text' | 'url' | 'date'
+  type: 'text' | 'url' | 'date' | 'number'
+  /** Shown only in the Content Tracker table, not in the task editor */
+  trackerOnly?: boolean
 }
 
 export interface Area {
@@ -15,6 +17,9 @@ export interface Area {
   name: string
   color: string
   fields: AreaField[]
+  /** Board columns before "เสร็จ" */
+  stages?: string[]
+  kind?: 'maintenance' | 'content' | 'personal'
   order: number
 }
 
@@ -39,6 +44,8 @@ export interface Task {
   recurrence: Recurrence
   /** Area-specific fields, keyed by AreaField.key */
   extra: Record<string, string>
+  /** Board column within the area's stages; missing = the first stage */
+  stage?: string
   /** Sub-steps, e.g. the steps of a PM job */
   checklist?: ChecklistItem[]
   /** Who does it, by name (people from meetings need no account) */
@@ -101,6 +108,14 @@ export class WorkbookDB extends Dexie {
       })
       .upgrade((tx) => tx.table('templates').bulkAdd(DEFAULT_TEMPLATES))
     this.version(3).stores({ kv: 'key' })
+    this.version(4)
+      .stores({})
+      .upgrade((tx) =>
+        tx
+          .table('areas')
+          .toCollection()
+          .modify((a: Area) => upgradeArea(a)),
+      )
     this.on('populate', (tx) => {
       tx.table('areas').bulkAdd(DEFAULT_AREAS)
       tx.table('templates').bulkAdd(DEFAULT_TEMPLATES)
@@ -108,10 +123,21 @@ export class WorkbookDB extends Dexie {
   }
 }
 
+export const CONTENT_STAGES = ['ไอเดีย', 'เขียนสคริปต์', 'ถ่าย', 'ตัดต่อ', 'รอโพสต์']
+export const CONTENT_TRACKER_FIELDS: AreaField[] = [
+  { key: 'postUrl', label: 'ลิงก์โพสต์', type: 'url', trackerOnly: true },
+  { key: 'views', label: 'วิว', type: 'number', trackerOnly: true },
+  { key: 'clicks', label: 'คลิก', type: 'number', trackerOnly: true },
+  { key: 'orders', label: 'ยอดขาย (ชิ้น)', type: 'number', trackerOnly: true },
+  { key: 'commission', label: 'ค่าคอม (บาท)', type: 'number', trackerOnly: true },
+]
+
 export const DEFAULT_AREAS: Area[] = [
   {
     name: 'ซ่อมบำรุง',
     color: '#ea580c',
+    kind: 'maintenance',
+    stages: ['รอดำเนินการ', 'รออะไหล่', 'กำลังทำ', 'รอตรวจรับ'],
     order: 1,
     fields: [
       { key: 'machine', label: 'เครื่องจักร', type: 'text' },
@@ -122,15 +148,28 @@ export const DEFAULT_AREAS: Area[] = [
   {
     name: 'คอนเทนต์',
     color: '#db2777',
+    kind: 'content',
+    stages: CONTENT_STAGES,
     order: 2,
     fields: [
       { key: 'platform', label: 'แพลตฟอร์ม', type: 'text' },
       { key: 'productUrl', label: 'ลิงก์สินค้า', type: 'url' },
       { key: 'postDate', label: 'วันโพสต์', type: 'date' },
+      ...CONTENT_TRACKER_FIELDS,
     ],
   },
-  { name: 'ส่วนตัว', color: '#16a34a', order: 3, fields: [] },
+  { name: 'ส่วนตัว', color: '#16a34a', kind: 'personal', stages: ['ต้องทำ', 'กำลังทำ'], order: 3, fields: [] },
 ]
+
+/** Fill in board stages, kind and tracker fields on areas made before version 4. */
+export function upgradeArea(a: Area): void {
+  const def = DEFAULT_AREAS.find((d) => d.name === a.name)
+  a.kind ??= def?.kind
+  a.stages ??= def?.stages ?? ['ต้องทำ', 'กำลังทำ']
+  if (a.kind === 'content') {
+    for (const f of CONTENT_TRACKER_FIELDS) if (!a.fields.some((x) => x.key === f.key)) a.fields.push(f)
+  }
+}
 
 export const DEFAULT_TEMPLATES: MeetingTemplate[] = [
   {
